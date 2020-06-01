@@ -1,0 +1,23 @@
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# User-specific files (MonoDevelop/Xamarin Studio)
+*.userprefs
+
+**/*.dll
+.vs
+Debug/
+Release/
+**/Debug
+**/glm
+.venv_*
+.vscode
+.ipynb_checkpoints
+
+path_data.txt
+__pycache__
+*.csv
