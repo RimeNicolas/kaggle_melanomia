@@ -1,120 +1,157 @@
-from __future__ import print_function
 import os
-from data import Dataset
-import torch
-from torch.utils import data
-import torch.nn.functional as F
-from models import *
-import torchvision
-from utils import Visualizer, view_model
-import torch
 import numpy as np
 import random
 import time
-from config import Config
-from torch.nn import DataParallel
+
+import torch
+import torchvision
+import torch.nn.functional as F
 from torch.optim.lr_scheduler import StepLR
-from test import *
+# from torch.utils import data
+# from torch.nn import DataParallel
 
+from config.config import Config
+from data.dataset import Dataset, RandomDataset
+from models.focal_loss import *
+from models.model_func import *
 
-def save_model(model, save_path, name, iter_cnt):
-    save_name = os.path.join(save_path, name + '_' + str(iter_cnt) + '.pth')
-    torch.save(model.state_dict(), save_name)
-    return save_name
+class TrainModel:
+    def __init__(self, opt=Config()):
+        self.opt = opt
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+    def init_dataset(self):
+        if self.opt.dataset_type == 'random':
+            dataset = RandomDataset(128, 1024)
+        else:
+            dataset = Dataset(self.opt.train_list, phase='train', input_shape=self.opt.input_shape)
 
-if __name__ == '__main__':
+        self.split_train_val = self.opt.split_train_val
+        if self.split_train_val:
+            split = int(0.75 * len(dataset))
+            train_set, val_set = torch.utils.data.random_split(dataset, [self.split, len(dataset) - self.split])
+        else:
+            train_set = dataset
 
-    opt = Config()
-    if opt.display:
-        visualizer = Visualizer()
-    device = torch.device("cuda")
+        self.trainloader = torch.utils.data.DataLoader(train_set,
+                                    batch_size=self.opt.train_batch_size,
+                                    shuffle=True,
+                                    num_workers=self.opt.num_workers)
+        if self.split_train_val:
+            self.valloader = torch.utils.data.DataLoader(val_set,
+                                    batch_size=self.opt.train_batch_size,
+                                    shuffle=False,
+                                    num_workers=self.opt.num_workers)
+    
+    def init_training(self):
+        if self.opt.loss == 'focal_loss':
+            self.criterion = FocalLoss(gamma=2)
+        else:
+            self.criterion = torch.nn.CrossEntropyLoss()
 
-    train_dataset = Dataset(opt.train_root, opt.train_list, phase='train', input_shape=opt.input_shape)
-    trainloader = data.DataLoader(train_dataset,
-                                  batch_size=opt.train_batch_size,
-                                  shuffle=True,
-                                  num_workers=opt.num_workers)
+        self.model = init_model(self.opt)
+        self.metric_fc = init_metric(self.opt)
 
-    identity_list = get_lfw_list(opt.lfw_test_list)
-    img_paths = [os.path.join(opt.lfw_root, each) for each in identity_list]
+        # print(model)
+        if self.opt.epoch_start > 0:
+            path_parameters = os.path.join(os.getcwd(), 'arcface-pytorch', 'checkpoints', self.opt.path_model_parameters)
+            self.model.load_state_dict(torch.load(path_parameters))
+        self.model.to(self.device)
+        # self.model = DataParallel(self.model)
+        if self.metric_fc is not None:
+            self.metric_fc.to(self.device)
+            # self.metric_fc = DataParallel(self.metric_fc)
+            if self.opt.optimizer == 'sgd':
+                self.optimizer = torch.optim.SGD([{'params': self.model.parameters()}, {'params': self.metric_fc.parameters()}],
+                                            lr=self.opt.lr, weight_decay=self.opt.weight_decay)
+            else:
+                self.optimizer = torch.optim.Adam([{'params': self.model.parameters()}, {'params': self.metric_fc.parameters()}],
+                                            lr=self.opt.lr, weight_decay=self.opt.weight_decay)
+        else:
+            if self.opt.optimizer == 'sgd':
+                self.optimizer = torch.optim.SGD([{'params': self.model.parameters()}],
+                                            lr=self.opt.lr, weight_decay=self.opt.weight_decay)
+            else:
+                self.optimizer = torch.optim.Adam([{'params': self.model.parameters()}],
+                                            lr=self.opt.lr, weight_decay=self.opt.weight_decay)
 
-    print('{} train iters per epoch:'.format(len(trainloader)))
+        self.scheduler = StepLR(self.optimizer, step_size=self.opt.lr_step, gamma=0.1)
 
-    if opt.loss == 'focal_loss':
-        criterion = FocalLoss(gamma=2)
-    else:
-        criterion = torch.nn.CrossEntropyLoss()
+    def _output(self, data_input, label):
+        data_input = data_input.to(self.device)
+        feature = self.model(data_input)
+        if self.metric_fc is not None:
+            feature = self.metric_fc(feature, label)
+        return feature
 
-    if opt.backbone == 'resnet18':
-        model = resnet_face18(use_se=opt.use_se)
-    elif opt.backbone == 'resnet34':
-        model = resnet34()
-    elif opt.backbone == 'resnet50':
-        model = resnet50()
+    def opt_step(self, data):
+        data_input, label = data
+        label = label.to(self.device).long()
+        output = self._output(data_input, label)
+        loss = self.criterion(output, label)
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+        self.scheduler.step()
+        self.running_loss += loss.item()
 
-    if opt.metric == 'add_margin':
-        metric_fc = AddMarginProduct(512, opt.num_classes, s=30, m=0.35)
-    elif opt.metric == 'arc_margin':
-        metric_fc = ArcMarginProduct(512, opt.num_classes, s=30, m=0.5, easy_margin=opt.easy_margin)
-    elif opt.metric == 'sphere':
-        metric_fc = SphereProduct(512, opt.num_classes, m=4)
-    else:
-        metric_fc = nn.Linear(512, opt.num_classes)
-
-    # view_model(model, opt.input_shape)
-    print(model)
-    model.to(device)
-    model = DataParallel(model)
-    metric_fc.to(device)
-    metric_fc = DataParallel(metric_fc)
-
-    if opt.optimizer == 'sgd':
-        optimizer = torch.optim.SGD([{'params': model.parameters()}, {'params': metric_fc.parameters()}],
-                                    lr=opt.lr, weight_decay=opt.weight_decay)
-    else:
-        optimizer = torch.optim.Adam([{'params': model.parameters()}, {'params': metric_fc.parameters()}],
-                                     lr=opt.lr, weight_decay=opt.weight_decay)
-    scheduler = StepLR(optimizer, step_size=opt.lr_step, gamma=0.1)
-
-    start = time.time()
-    for i in range(opt.max_epoch):
-        scheduler.step()
-
-        model.train()
-        for ii, data in enumerate(trainloader):
+    def _eval_model(self, dataset_type='val'):
+        self.model.eval()
+        if dataset_type == 'train':
+            dataloader = self.trainloader
+        elif dataset_type == 'val':
+            dataloader = self.valloader
+        else:
+            Exception('no known dataset type to compute accuracy on')
+        acc = 0
+        for ii, data in enumerate(dataloader):
             data_input, label = data
-            data_input = data_input.to(device)
-            label = label.to(device).long()
-            feature = model(data_input)
-            output = metric_fc(feature, label)
-            loss = criterion(output, label)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            output = self._output(data_input, label)
+            output = torch.argmax(output, axis=1).data.cpu()
+            aa = torch.sum(output.long() == label.long())
+            acc += aa.item()
+        acc /= len(dataloader.dataset)
+        if dataset_type == 'train':
+            print('accuracy on training set : {:.2f}'.format(acc))
+        if dataset_type == 'val':
+            print('accuracy on validation set : {:.2f}'.format(acc))
+        self.model.train()
 
-            iters = i * len(trainloader) + ii
 
-            if iters % opt.print_freq == 0:
-                output = output.data.cpu().numpy()
-                output = np.argmax(output, axis=1)
-                label = label.data.cpu().numpy()
-                # print(output)
-                # print(label)
-                acc = np.mean((output == label).astype(int))
-                speed = opt.print_freq / (time.time() - start)
-                time_str = time.asctime(time.localtime(time.time()))
-                print('{} train epoch {} iter {} {} iters/s loss {} acc {}'.format(time_str, i, ii, speed, loss.item(), acc))
-                if opt.display:
-                    visualizer.display_current_results(iters, loss.item(), name='train_loss')
-                    visualizer.display_current_results(iters, acc, name='train_acc')
+    def _train(self):
+        self.init_dataset()
+        self.init_training()
+        self.t0 = time.time()
+        self.t1 = self.t0
+        print('start training')
+        # self._eval_model('train')
+        for i in range(self.opt.epoch_max):
+            self.model.train()
 
-                start = time.time()
+            self.running_loss = 0
+            for ii, data in enumerate(self.trainloader):
+                self.opt_step(data)
 
-        if i % opt.save_interval == 0 or i == opt.max_epoch:
-            save_model(model, opt.checkpoints_path, opt.backbone, i)
+            self.running_loss /= len(self.trainloader)
+            time_str = time.asctime(time.localtime(time.time()))
+            print('{} train epoch {}, loss {:.5f}, time {:.2f} s'.format(time_str, self.opt.epoch_start + i+1, self.running_loss, time.time() - self.t0))
 
-        model.eval()
-        acc = lfw_test(model, img_paths, identity_list, opt.lfw_test_list, opt.test_batch_size)
-        if opt.display:
-            visualizer.display_current_results(iters, acc, name='test_acc')
+            if (i+1) % self.opt.save_interval == 0 or (i+1) == self.opt.epoch_max:
+                save_model(self.model, self.opt.checkpoints_path, self.opt.backbone, self.opt.epoch_start + i+1)
+                self._eval_model('train')
+                if self.split_train_val > 0:
+                    self._eval_model('val')
+
+            self.t0 = time.time()
+        print('total training time {:.2f} min'.format((time.time() - self.t1) / 60.0))
+
+    def __call__(self):
+        try:
+            self._train()
+        except:
+            print('error occured while training the model')
+            raise
+
+                
+if __name__ == '__main__':
+    TrainModel()()
