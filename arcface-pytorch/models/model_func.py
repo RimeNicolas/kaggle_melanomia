@@ -8,7 +8,7 @@ from config.config import Config
 
 def init_model(opt=Config()):
     if opt.backbone == 'resnet18':
-        model = resnet18(num_classes=2)
+        model = resnet18(pretrained=True, num_classes=1000)
     elif opt.backbone == 'resnet34':
         model = resnet34(num_classes=2)
     elif opt.backbone == 'resnet50':
@@ -24,9 +24,11 @@ def init_metric(opt=Config()):
     if opt.metric == 'add_margin':
         metric_fc = AddMarginProduct(512, opt.num_classes, s=30, m=0.35)
     elif opt.metric == 'arc_margin':
-        metric_fc = ArcMarginProduct(512, opt.num_classes, s=30, m=0.5, easy_margin=opt.easy_margin)
+        metric_fc = ArcMarginProduct(64, opt.num_classes, s=30, m=0.5, easy_margin=opt.easy_margin)
     elif opt.metric == 'sphere':
         metric_fc = SphereProduct(512, opt.num_classes, m=4)
+    elif opt.metric == 'linear':
+        metric_fc = nn.Linear(1000, opt.num_classes)
     elif opt.metric == 'None':
         metric_fc = None
     else:

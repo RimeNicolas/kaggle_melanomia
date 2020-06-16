@@ -11,7 +11,7 @@ from torch.optim.lr_scheduler import StepLR
 # from torch.nn import DataParallel
 
 from config.config import Config
-from data.dataset import Dataset, RandomDataset
+from data.dataset import Dataset
 from models.focal_loss import *
 from models.model_func import *
 
@@ -28,7 +28,7 @@ class TrainModel:
 
         self.split_train_val = self.opt.split_train_val
         if self.split_train_val:
-            split = int(0.75 * len(dataset))
+            self.split = int(0.95 * len(dataset))
             train_set, val_set = torch.utils.data.random_split(dataset, [self.split, len(dataset) - self.split])
         else:
             train_set = dataset
@@ -47,6 +47,7 @@ class TrainModel:
         if self.opt.loss == 'focal_loss':
             self.criterion = FocalLoss(gamma=2)
         else:
+            # self.criterion = torch.nn.CrossEntropyLoss(weight=torch.Tensor([0.45, 0.55]).to(self.device))
             self.criterion = torch.nn.CrossEntropyLoss()
 
         self.model = init_model(self.opt)
@@ -56,6 +57,8 @@ class TrainModel:
         if self.opt.epoch_start > 0:
             path_parameters = os.path.join(os.getcwd(), 'arcface-pytorch', 'checkpoints', self.opt.path_model_parameters)
             self.model.load_state_dict(torch.load(path_parameters))
+            path_parameters = os.path.join(os.getcwd(), 'arcface-pytorch', 'checkpoints', self.opt.path_metric_parameters)
+            self.metric_fc.load_state_dict(torch.load(path_parameters))
         self.model.to(self.device)
         # self.model = DataParallel(self.model)
         if self.metric_fc is not None:
@@ -65,7 +68,7 @@ class TrainModel:
                 self.optimizer = torch.optim.SGD([{'params': self.model.parameters()}, {'params': self.metric_fc.parameters()}],
                                             lr=self.opt.lr, weight_decay=self.opt.weight_decay)
             else:
-                self.optimizer = torch.optim.Adam([{'params': self.model.parameters()}, {'params': self.metric_fc.parameters()}],
+                self.optimizer = torch.optim.Adam([{'params': self.model.parameters()}, {'params': self.metric_fc.parameters(), 'lr': 200*self.opt.lr}],
                                             lr=self.opt.lr, weight_decay=self.opt.weight_decay)
         else:
             if self.opt.optimizer == 'sgd':
@@ -75,13 +78,16 @@ class TrainModel:
                 self.optimizer = torch.optim.Adam([{'params': self.model.parameters()}],
                                             lr=self.opt.lr, weight_decay=self.opt.weight_decay)
 
-        self.scheduler = StepLR(self.optimizer, step_size=self.opt.lr_step, gamma=0.1)
+        self.scheduler = StepLR(self.optimizer, step_size=self.opt.lr_step*len(self.trainloader), gamma=0.1)
 
     def _output(self, data_input, label):
         data_input = data_input.to(self.device)
         feature = self.model(data_input)
         if self.metric_fc is not None:
-            feature = self.metric_fc(feature, label)
+            if self.opt.metric == 'linear':
+                feature = self.metric_fc(feature)
+            else:
+                feature = self.metric_fc(feature, label)
         return feature
 
     def opt_step(self, data):
@@ -106,15 +112,18 @@ class TrainModel:
         acc = 0
         for ii, data in enumerate(dataloader):
             data_input, label = data
+            if self.opt.metric == 'arc_margin':
+                label = label.to(self.device).long()
             output = self._output(data_input, label)
             output = torch.argmax(output, axis=1).data.cpu()
+            label = label.data.cpu()
             aa = torch.sum(output.long() == label.long())
             acc += aa.item()
         acc /= len(dataloader.dataset)
         if dataset_type == 'train':
-            print('accuracy on training set : {:.2f}'.format(acc))
+            print('accuracy on training set : {:.4f}'.format(acc))
         if dataset_type == 'val':
-            print('accuracy on validation set : {:.2f}'.format(acc))
+            print('accuracy on validation set : {:.4f}'.format(acc))
         self.model.train()
 
 
@@ -134,10 +143,15 @@ class TrainModel:
 
             self.running_loss /= len(self.trainloader)
             time_str = time.asctime(time.localtime(time.time()))
-            print('{} train epoch {}, loss {:.5f}, time {:.2f} s'.format(time_str, self.opt.epoch_start + i+1, self.running_loss, time.time() - self.t0))
+            lr_s = list()
+            for param_group in self.optimizer.param_groups:
+                lr_s.append(param_group['lr'])
+            print('{} train epoch {}, loss {:.5f}, time {:.2f} s, lr model {:.1e}, lr metric {:.1e}'.format(
+                time_str, self.opt.epoch_start + i+1, self.running_loss, time.time() - self.t0, lr_s[0], lr_s[1]))
 
             if (i+1) % self.opt.save_interval == 0 or (i+1) == self.opt.epoch_max:
                 save_model(self.model, self.opt.checkpoints_path, self.opt.backbone, self.opt.epoch_start + i+1)
+                save_model(self.metric_fc, self.opt.checkpoints_path, 'metric', self.opt.epoch_start + i+1)
                 self._eval_model('train')
                 if self.split_train_val > 0:
                     self._eval_model('val')

@@ -97,6 +97,7 @@ def preprocess_dataset1(data_list_file, dir_imgs_old, dir_imgs_new):
             csvfile.write(el + '\n')
 
 
+
 def process_csv(data_list_file, data_list_file_out, dir_img_new, test=False):
     with open(os.path.join(data_list_file), 'r') as fd:
             data_imgs = fd.readlines()

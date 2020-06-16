@@ -1,9 +1,10 @@
 import os
 import time
 
+from collections import Counter
 
 from config.config import Config
-from data.dataset import Dataset, RandomDataset
+from data.dataset import Dataset
 from models.focal_loss import *
 from models.model_func import *
 
@@ -17,6 +18,12 @@ class TestModel:
         self.model.load_state_dict(torch.load(path_parameters))
         self.model.to(self.device)
         self.model.eval()
+
+        self.metric_fc = init_metric(self.opt)
+        path_parameters = os.path.join(os.getcwd(), 'arcface-pytorch', 'checkpoints', opt.path_metric_parameters_test)
+        self.metric_fc.load_state_dict(torch.load(path_parameters))
+        self.metric_fc.to(self.device)
+        self.metric_fc.eval()
         
     def init_dataset(self):
         test_set = Dataset(self.opt.test_list, phase='test', input_shape=self.opt.input_shape)
@@ -29,12 +36,14 @@ class TestModel:
     def _output(self, data_input):
         data_input = data_input.to(self.device)
         feature = self.model(data_input)
-        return torch.argmax(feature, axis=1)
+        output = self.metric_fc(feature)
+        return torch.argmax(output, axis=1)
 
     def __call__(self):
         self.init_dataset()
         self.csv_data = list()
         self.t0 = time.time()
+        cnt = Counter()
         print('start testing')
         for ii, data in enumerate(self.testloader):
             # if ii > 1:
@@ -43,11 +52,14 @@ class TestModel:
                 print('batch {} of {}'.format(ii+1, len(self.testloader)))
             data_input, img_name = data
             output = self._output(data_input)
-            self.csv_data += zip(img_name, list(output.cpu().numpy()))
-        self.csv_data = sorted(self.csv_data, key = lambda x : x[0])
+            output = list(output.cpu().numpy())
+            cnt += Counter(output)
+            self.csv_data += zip(img_name, output)
+        self.csv_data = sorted(self.csv_data, key = lambda x : x[0].split('.')[0])
         length_csv = len(self.csv_data)
         print('length of csv data :', length_csv)
         print('inference done, start writing results in file')
+        print(cnt)
         with open(self.opt.test_save, 'w') as csvfile:
             csvfile.write('image_name,target\n')
             for i, el in enumerate(self.csv_data):
