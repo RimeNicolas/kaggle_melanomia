@@ -5,4 +5,5 @@
 path_data.txt
 __pycache__
 *.csv
-./checkpoints
+**/checkpoints/
+**/old_files/

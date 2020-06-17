@@ -7,8 +7,6 @@ import torch
 import torchvision
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import StepLR
-# from torch.utils import data
-# from torch.nn import DataParallel
 
 from config.config import Config
 from data.dataset import Dataset

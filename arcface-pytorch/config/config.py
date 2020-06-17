@@ -20,7 +20,7 @@ class Config(object):
     gpu_id = '0'
     num_workers = 4  
 
-    input_shape = (3, 512, 512)
+    input_shape = (3, 224, 224)
     train_batch_size = 32
     test_batch_size = train_batch_size 
 
@@ -37,10 +37,13 @@ class Config(object):
 
     path_model_parameters_test = 'resnet18_10.pth'
     path_metric_parameters_test = 'metric_10.pth'
+    test_list = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\testset\test.csv'
+    test_save = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\testset\submission.csv'
+
+
+
     # test_list = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\original\jpeg\test.csv'
     # test_save = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\original\jpeg\submission.csv'
-    test_list = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\dataset1\jpeg_test\test.csv'
-    test_save = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\dataset1\jpeg_test\submission.csv'
     # test_list = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\dataset2\jpeg_test\test.csv'
     # test_save = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\dataset2\jpeg_test\submission.csv'
     # test_list = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\bench2\test_unlabelled.csv'
