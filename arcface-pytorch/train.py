@@ -2,6 +2,8 @@ import os
 import numpy as np
 import random
 import time
+from signal import signal, SIGINT
+from sys import exit
 
 import torch
 import torchvision
@@ -12,11 +14,13 @@ from config.config import Config
 from data.dataset import Dataset
 from models.focal_loss import *
 from models.model_func import *
+from test import TestModel
 
 class TrainModel:
     def __init__(self, opt=Config()):
         self.opt = opt
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.init_dataset()
 
     def init_dataset(self):
         if self.opt.dataset_type == 'random':
@@ -26,7 +30,7 @@ class TrainModel:
 
         self.split_train_val = self.opt.split_train_val
         if self.split_train_val:
-            self.split = int(0.95 * len(dataset))
+            self.split = int(0.90 * len(dataset))
             train_set, val_set = torch.utils.data.random_split(dataset, [self.split, len(dataset) - self.split])
         else:
             train_set = dataset
@@ -58,15 +62,13 @@ class TrainModel:
             path_parameters = os.path.join(os.getcwd(), 'arcface-pytorch', 'checkpoints', self.opt.path_metric_parameters)
             self.metric_fc.load_state_dict(torch.load(path_parameters))
         self.model.to(self.device)
-        # self.model = DataParallel(self.model)
         if self.metric_fc is not None:
             self.metric_fc.to(self.device)
-            # self.metric_fc = DataParallel(self.metric_fc)
             if self.opt.optimizer == 'sgd':
                 self.optimizer = torch.optim.SGD([{'params': self.model.parameters()}, {'params': self.metric_fc.parameters()}],
                                             lr=self.opt.lr, weight_decay=self.opt.weight_decay)
             else:
-                self.optimizer = torch.optim.Adam([{'params': self.model.parameters()}, {'params': self.metric_fc.parameters(), 'lr': 200*self.opt.lr}],
+                self.optimizer = torch.optim.Adam([{'params': self.model.parameters()}, {'params': self.metric_fc.parameters(), 'lr': 10*self.opt.lr}],
                                             lr=self.opt.lr, weight_decay=self.opt.weight_decay)
         else:
             if self.opt.optimizer == 'sgd':
@@ -126,11 +128,11 @@ class TrainModel:
 
 
     def _train(self):
-        self.init_dataset()
         self.init_training()
         self.t0 = time.time()
         self.t1 = self.t0
-        print('start training')
+        print('start training: loss {}, opt {}, img_shape {}, w_decay {:.1e}, batch {}'.format(
+                self.opt.loss, self.opt.optimizer, self.opt.input_shape[1], self.opt.weight_decay, self.opt.train_batch_size))
         # self._eval_model('train')
         for i in range(self.opt.epoch_max):
             self.model.train()
@@ -148,10 +150,13 @@ class TrainModel:
                 time_str, self.opt.epoch_start + i+1, self.running_loss, time.time() - self.t0, lr_s[0], lr_s[1]))
 
             if (i+1) % self.opt.save_interval == 0 or (i+1) == self.opt.epoch_max:
-                save_model(self.model, self.opt.checkpoints_path, self.opt.backbone, self.opt.epoch_start + i+1)
-                save_model(self.metric_fc, self.opt.checkpoints_path, 'metric', self.opt.epoch_start + i+1)
+                if self.opt.save_model is True:
+                    save_model(self.model, self.opt.checkpoints_path, self.opt.backbone, self.opt.epoch_start + i+1)
+                    save_model(self.metric_fc, self.opt.checkpoints_path, 'metric', self.opt.epoch_start + i+1)
+            if (i+1) % self.opt.accuracy_train_interval == 0:
                 self._eval_model('train')
-                if self.split_train_val > 0:
+            if self.split_train_val is True:
+                if (i+1) % self.opt.accuracy_val_interval == 0:
                     self._eval_model('val')
 
             self.t0 = time.time()
@@ -159,11 +164,37 @@ class TrainModel:
 
     def __call__(self):
         try:
-            self._train()
+            def handler(signal_received, frame):
+                # Handle any cleanup here
+                print('SIGINT or CTRL-C detected. Training stopped')
+                exit(0)
+            signal(SIGINT, handler)
+            while True:
+                self._train()
+                break
         except:
             print('error occured while training the model')
             raise
 
+
+def tune_hyperparameters():
+    list_weight_decay = [5, 1]
+    training_model = TrainModel()
+    for w_decay in list_weight_decay:
+        training_model.opt.weight_decay = w_decay
+        print('-'*50)
+        training_model()
+
+
+def train_submission():
+    cfg = Config()
+    cfg.save_model = True
+    cfg.split_train_val = False
+    # TrainModel(cfg)()
+    TestModel(cfg)()
+
                 
 if __name__ == '__main__':
-    TrainModel()()
+    # TrainModel()()
+    # tune_hyperparameters()
+    train_submission()

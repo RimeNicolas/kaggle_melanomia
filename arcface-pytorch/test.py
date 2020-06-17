@@ -14,13 +14,13 @@ class TestModel:
         self.opt = opt
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model = init_model(opt)
-        path_parameters = os.path.join(os.getcwd(), 'arcface-pytorch', 'checkpoints', opt.path_model_parameters_test)
+        path_parameters = os.path.join(opt.checkpoints_path, opt.path_model_parameters_test)
         self.model.load_state_dict(torch.load(path_parameters))
         self.model.to(self.device)
         self.model.eval()
 
         self.metric_fc = init_metric(self.opt)
-        path_parameters = os.path.join(os.getcwd(), 'arcface-pytorch', 'checkpoints', opt.path_metric_parameters_test)
+        path_parameters = os.path.join(opt.checkpoints_path, opt.path_metric_parameters_test)
         self.metric_fc.load_state_dict(torch.load(path_parameters))
         self.metric_fc.to(self.device)
         self.metric_fc.eval()
