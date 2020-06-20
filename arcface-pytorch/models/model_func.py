@@ -24,19 +24,14 @@ def init_metric(opt=Config()):
     if opt.metric == 'add_margin':
         metric_fc = AddMarginProduct(512, opt.num_classes, s=30, m=0.35)
     elif opt.metric == 'arc_margin':
-        metric_fc = ArcMarginProduct(64, opt.num_classes, s=30, m=0.5, easy_margin=opt.easy_margin)
+        metric_fc = ArcMarginProduct(1000, opt.num_classes, s=opt.arc_s, m=opt.arc_m, easy_margin=opt.easy_margin)
     elif opt.metric == 'sphere':
         metric_fc = SphereProduct(512, opt.num_classes, m=4)
     elif opt.metric == 'linear':
-        metric_fc = nn.Linear(1000, opt.num_classes)
+        metric_fc = nn.Linear(1000, opt.num_classes, bias=True)
     elif opt.metric == 'None':
         metric_fc = None
     else:
         raise Exception('no known metric was specified')
     return metric_fc
 
-
-def save_model(model, save_path, name, iter_cnt):
-    save_name = os.path.join(save_path, name + '_' + str(iter_cnt) + '.pth')
-    torch.save(model.state_dict(), save_name)
-    return save_name

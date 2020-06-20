@@ -1,0 +1,7 @@
+efficientnet
+meta-data
+modify to have cross validation
+
+to check:
+check dataset randomness
+put batch norm after resnet18 (in arcface)

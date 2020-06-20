@@ -1,4 +1,4 @@
-# For 224x224
+# For 512x512
 
 class Config(object):
     env = 'default'
@@ -6,42 +6,39 @@ class Config(object):
     classify = 'softmax'
     num_classes = 2
     metric = 'linear'
-    arc_s = 3
-    arc_m = 0.0
     easy_margin = False
     loss = 'focal_loss' # seems to give worse results for training accuracy but better for validation
 
+    dataset_type = 'images'
     # train_list = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\original\jpeg\train.csv'
     train_list = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\dataset1\jpeg_train\train.csv'
     # train_list = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\dataset2\jpeg_train\train.csv'
     # train_list = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\dataset3\jpeg_train\train.csv'
     # train_list = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\bench2\train.csv'
+    split_train_val = True
 
     optimizer = 'adam'
     use_gpu = True
     gpu_id = '0'
     num_workers = 4  
 
-    input_shape = (3, 224, 224)
-    train_batch_size = 64
+    input_shape = (3, 512, 512)
+    train_batch_size = 32
     test_batch_size = train_batch_size 
 
-    n_fold = 3 # 0 is all dataset
-    epoch_max = 2 
-    lr_model = 1e-4 
-    lr_metric = 2e-2 
+    epoch_max = 20
+    lr = 1e-4  # initial learning rate
     lr_step = 10 # divide lr by 10 every lr_step
-    # weight_decay = 2e-1 # for resize img only
-    weight_decay = 2e-4
-    accuracy_val_interval = 1
-    accuracy_train_interval = 10 * accuracy_val_interval
+    weight_decay = 2e-2
+    accuracy_val_interval = 2
+    accuracy_train_interval = 5 * accuracy_val_interval
 
-    save_model = True
+    save_model = False
     checkpoints_path = r'C:\Users\Nrime\source\repos\kaggle_melanomia\arcface-pytorch\checkpoints'
     epoch_start = 0
     path_model_parameters = backbone + '_' + str(epoch_start) + '.pth'
     path_metric_parameters = 'metric' + '_' + str(epoch_start) + '.pth'
-    save_interval = 1
+    save_interval = epoch_max
 
     path_model_parameters_test = backbone + '_' + str(epoch_max) + '.pth'
     path_metric_parameters_test = 'metric' + '_' + str(epoch_max) + '.pth'

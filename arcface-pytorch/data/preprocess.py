@@ -94,6 +94,36 @@ def preprocess_trainset(path_csv_old, dir_imgs_old, dir_imgs_new, diff=0):
             csvfile.write(el + '\n')
 
 
+def preprocess_train_data(path_csv_old, dir_imgs_old, dir_imgs_new):
+    """
+    process all images using crop_resize_img and create new .csv file
+    """
+    os.makedirs(dir_imgs_new, exist_ok=True)
+    os.makedirs(os.path.join(dir_imgs_new,'0'), exist_ok=True)
+    os.makedirs(os.path.join(dir_imgs_new,'1'), exist_ok=True)
+    path_csv_new = os.path.join(dir_imgs_new, 'train.csv')
+
+    with open(os.path.join(path_csv_old), 'r') as fd:
+        data_imgs = fd.readlines()
+
+    csv_data = list()
+
+    def f(data_img):
+        split = data_img.split(',')
+        img_name = split[0] + '.jpg'
+        label = str(split[-1][:-1])
+        path_img_old = os.path.join(dir_imgs_old, img_name)
+        path_img_new = os.path.join(dir_imgs_new, label, img_name)
+        crop_resize_img(path_img_old, path_img_new)
+        return ','.join([path_img_new, label])
+    num_cores = multiprocessing.cpu_count()
+    csv_data = Parallel(n_jobs=num_cores)(delayed(f)(data_img) for data_img in data_imgs[1:])
+
+    with open(path_csv_new, 'w') as csvfile:
+        for el in csv_data:
+            csvfile.write(el + '\n')
+
+
 def preprocess_test_data(path_csv_old, dir_imgs_old, dir_imgs_new):
     os.makedirs(dir_imgs_new, exist_ok=True)
     os.makedirs(os.path.join(dir_imgs_new, 'img'), exist_ok=True)
@@ -144,13 +174,25 @@ def create_dataset1():
     dir_imgs_new = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\dataset1\jpeg_train'
     preprocess_trainset(path_csv_old, dir_imgs_old, dir_imgs_new)
 
+def create_dataset2():
+    path_csv_old = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\original\train.csv'
+    dir_imgs_old = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\original\jpeg\train'
+    dir_imgs_new = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\dataset2\jpeg_train'
+    preprocess_trainset(path_csv_old, dir_imgs_old, dir_imgs_new, diff=5)
+
+def create_dataset3():
+    path_csv_old = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\original\train.csv'
+    dir_imgs_old = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\original\jpeg\train'
+    dir_imgs_new = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\dataset3\jpeg_train'
+    preprocess_train_data(path_csv_old, dir_imgs_old, dir_imgs_new)
+
 def cnt_imgs_shape():
-    dir_imgs0 = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\dataset1\jpeg_train\0'
-    dir_imgs1 = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\dataset1\jpeg_train\1'
+    dir_imgs0 = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\dataset3\jpeg_train\0'
+    dir_imgs1 = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\dataset3\jpeg_train\1'
     dir_imgs_test = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\testset\img'
-    # parallel_cnt_img_shapes(dir_imgs0)
-    # parallel_cnt_img_shapes(dir_imgs1)
-    parallel_cnt_img_shapes(dir_imgs_test)
+    parallel_cnt_img_shapes(dir_imgs0)
+    parallel_cnt_img_shapes(dir_imgs1)
+    # parallel_cnt_img_shapes(dir_imgs_test)
 
 def create_testset():
     path_csv_old = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\original\test.csv'
@@ -160,6 +202,8 @@ def create_testset():
 
 if __name__ == '__main__':
     # create_dataset1()
-    create_testset()
+    # create_dataset2()
+    create_dataset3()
+    # create_testset()
     cnt_imgs_shape()
 

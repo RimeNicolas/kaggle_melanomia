@@ -20,16 +20,33 @@ class Dataset(torch.utils.data.Dataset):
 
         if self.phase == 'train':
             self.data_imgs = np.random.permutation(data_imgs)
-            self.transforms = T.Compose([
+            self.transforms1 = T.Compose([
                 # T.Grayscale(num_output_channels=1),
                 # T.RandomAffine(degrees=180, translate=(0.45,0.45), scale=(0.5,1.5), shear=None, resample=False, fillcolor=0),
-                # T.CenterCrop(self.input_shape[1:]),
                 T.Resize(self.input_shape[1:], interpolation=2),
                 T.RandomVerticalFlip(p=0.5),
                 T.RandomHorizontalFlip(p=0.5),
                 T.ToTensor(),
                 T.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
                 # T.transforms.Normalize(mean=[0.5], std=[0.5])
+            ])
+            self.transforms2 = T.Compose([
+                # T.Grayscale(num_output_channels=1),
+                # T.RandomAffine(degrees=180, translate=(0.45,0.45), scale=(0.5,1.5), shear=None, resample=False, fillcolor=0),
+                T.RandomCrop(self.input_shape[1:]),
+                T.RandomVerticalFlip(p=0.5),
+                T.RandomHorizontalFlip(p=0.5),
+                T.ToTensor(),
+                T.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                # T.transforms.Normalize(mean=[0.5], std=[0.5])
+            ])
+            self.transforms3 = T.Compose([
+                T.RandomResizedCrop(size = 224, scale = (0.5, 1.0)), 
+                T.RandomHorizontalFlip(), 
+                T.RandomVerticalFlip(), 
+                T.ColorJitter(brightness = 32. / 255., saturation = 0.5),
+                T.ToTensor(), 
+                T.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225])
             ])
         else:
             self.data_imgs = data_imgs
@@ -46,7 +63,14 @@ class Dataset(torch.utils.data.Dataset):
         img_path = splits[0]
         img = Image.open(img_path)
         # img = img.convert('L')
-        img = self.transforms(img)
+        if self.phase == 'train':
+            img = self.transforms1(img)
+            # if np.random.randint(2) == 0:
+            #     img = self.transforms1(img)
+            # else:
+            #     img = self.transforms2(img)
+        else:
+            img = self.transforms(img)
         if self.phase == 'test':
             return img.float(), img_path.split('\\')[-1].split('.')[0]
         label = np.int32(splits[-1])
@@ -68,13 +92,13 @@ def transform_show_img(img):
 
 
 def show_dataset_img(batch_imgs=True):
-    trainset = Dataset(path_csv_file=r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\dataset2\jpeg_train\train.csv',
-        input_shape=(3, 256, 256), phase='train')
-    testset = Dataset(path_csv_file=r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\dataset2\jpeg_test\test.csv',
-        input_shape=(3, 256, 256), phase='test')
+    trainset = Dataset(path_csv_file=r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\dataset1\jpeg_train\train.csv',
+        input_shape=(3, 224, 224), phase='train')
+    testset = Dataset(path_csv_file=r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\testset\test.csv',
+        input_shape=(3, 224, 224), phase='test')
 
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=4)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=4)
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=16)
+    testloader = torch.utils.data.DataLoader(testset, batch_size=16)
     for i, (data, label) in enumerate(trainloader):
         if i > 0:
             break
