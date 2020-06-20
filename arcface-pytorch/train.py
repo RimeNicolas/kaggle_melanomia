@@ -103,38 +103,31 @@ class TrainModel:
         self.running_loss += loss.item()
 
     def _eval_model(self, dataset_type='val'):
-        self.model.eval()
         if dataset_type == 'train':
             dataloader = self.trainloader
         elif dataset_type == 'val':
             dataloader = self.valloader
-            val_predictions, val_targets = list(), list()
         else:
             Exception('no known dataset type to compute accuracy on')
-        acc = 0
-        for ii, data in enumerate(dataloader):
-            data_input, label = data
-            if self.opt.metric == 'arc_margin':
-                label = label.to(self.device).long()
-            output = self._output(data_input, label)
-            if dataset_type == 'val':
-                val_predictions.append(torch.softmax(output, 1)[:, 1].detach().cpu().numpy())
-                val_targets.append(label.detach().cpu().numpy())
-            output = torch.argmax(output, axis=1).data.cpu()
-            label = label.data.cpu()
-            aa = torch.sum(output.long() == label.long())
-            acc += aa.item()
-        acc /= len(dataloader.dataset)
+        self.model.eval()
+        with torch.no_grad():
+            predictions, targets = list(), list()
+            for ii, data in enumerate(dataloader):
+                data_input, label = data
+                if self.opt.metric == 'arc_margin':
+                    label = label.to(self.device).long()
+                output = self._output(data_input, label)
+                predictions.append(torch.softmax(output, 1)[:, 1].detach().cpu().numpy())
+                targets.append(label.detach().cpu().numpy())
+        targets = np.concatenate(targets)
+        predictions = np.concatenate(predictions)
+        auc = roc_auc_score(targets, predictions)
+        acc = accuracy_score(targets, np.round(predictions))
         if dataset_type == 'train':
-            print('accuracy on training set : {:.4f}'.format(acc))
+            print('accuracy on training set : {:.4f}, auc on training set : {:.4f}'.format(acc, auc))
         if dataset_type == 'val':
-            # print('accuracy on validation set : {:.4f}'.format(acc))
-            val_targets = np.concatenate(val_targets)
-            val_predictions = np.concatenate(val_predictions)
-            val_auc = roc_auc_score(val_targets, val_predictions)
-            val_acc = accuracy_score(val_targets, np.round(val_predictions))
-            self.val_auc = val_auc
-            print('accuracy on validation set : {:.4f}, auc on validation set : {:.4f}'.format(val_acc, val_auc))
+            self.val_auc = auc
+            print('accuracy on validation set : {:.4f}, auc on validation set : {:.4f}'.format(acc, auc))
         self.model.train()
 
     def _info_training(self):
@@ -187,7 +180,7 @@ class TrainModel:
                 self.best_val_auc = self.val_auc
                 if self.opt.save_model is True:
                     torch.save(self.model.state_dict(), os.path.join(self.opt.checkpoints_path, self.opt.backbone + '.pth'))
-                    torch.save(self.model.state_dict(), os.path.join(self.opt.checkpoints_path, 'metric' + '.pth'))
+                    torch.save(self.metric_fc.state_dict(), os.path.join(self.opt.checkpoints_path, 'metric' + '.pth'))
 
             self.scheduler.step(self.running_loss)
             # self.scheduler.step(self.val_auc)
@@ -204,10 +197,11 @@ class TrainModel:
             check_path = self.opt.checkpoints_path
             for i in range(self.opt.n_fold):
                 self._init_dataset()
-                self.opt.checkpoints_path = check_path + str(i+1)
+                self.opt.checkpoints_path = os.path.join(check_path, 'checkpoints' + str(i+1))
                 os.makedirs(self.opt.checkpoints_path, exist_ok=True)
                 self._train()
-                print('=' * 80)
+                print('=' * 100)
+            self.opt.checkpoints_path = check_path
 
     def __call__(self):
         try:
@@ -247,6 +241,6 @@ def train_submission():
 
                 
 if __name__ == '__main__':
-    TrainModel()()
+    # TrainModel()()
     # tune_hyperparameters()
-    # train_submission()
+    train_submission()

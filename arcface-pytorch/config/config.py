@@ -2,7 +2,7 @@
 
 class Config(object):
     env = 'default'
-    backbone = 'resnet18'
+    backbone = 'efficientnet_b0'
     classify = 'softmax'
     num_classes = 2
     metric = 'linear'
@@ -23,28 +23,30 @@ class Config(object):
     num_workers = 4  
 
     input_shape = (3, 224, 224)
-    train_batch_size = 64
+    train_batch_size = 128
     test_batch_size = train_batch_size 
 
     n_fold = 3 # 0 is all dataset
-    epoch_max = 2 
+    epoch_max = 30
     lr_model = 1e-4 
     lr_metric = 2e-2 
-    lr_step = 10 # divide lr by 10 every lr_step
+    # lr_step = 10 # divide lr by 10 every lr_step (removed atm)
     # weight_decay = 2e-1 # for resize img only
-    weight_decay = 2e-4
+    weight_decay = 2e-1
     accuracy_val_interval = 1
     accuracy_train_interval = 10 * accuracy_val_interval
 
     save_model = True
     checkpoints_path = r'C:\Users\Nrime\source\repos\kaggle_melanomia\arcface-pytorch\checkpoints'
     epoch_start = 0
-    path_model_parameters = backbone + '_' + str(epoch_start) + '.pth'
-    path_metric_parameters = 'metric' + '_' + str(epoch_start) + '.pth'
+    # path_model_parameters = backbone + '_' + str(epoch_start) + '.pth'
+    # path_metric_parameters = 'metric' + '_' + str(epoch_start) + '.pth'
     save_interval = 1
 
-    path_model_parameters_test = backbone + '_' + str(epoch_max) + '.pth'
-    path_metric_parameters_test = 'metric' + '_' + str(epoch_max) + '.pth'
+    # path_model_parameters_test = backbone + '_' + str(epoch_max) + '.pth'
+    # path_metric_parameters_test = 'metric' + '_' + str(epoch_max) + '.pth'
+    path_model_parameters_test = backbone + '.pth'
+    path_metric_parameters_test = 'metric' + '.pth'
     test_list = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\testset\test.csv'
     test_save = r'C:\Users\Nrime\Documents\Kaggle_dataset\melanoma\testset\submission.csv'
 
